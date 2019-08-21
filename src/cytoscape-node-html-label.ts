@@ -349,24 +349,22 @@ interface CytoscapeNodeHtmlParams {
     }
 
     function updateDataOrStyleCyHandler(ev: ICyEventObject) {
-      setTimeout(() => {
-        if (ev.cy.destroyed()) {
-          return;
-        }
-        let target = ev.target;
-        let param = $$find(_params.slice().reverse(), x => target.is(x.query));
-        if (param) {
-          const nodePosition = getNodePosition(target);
-          const { label, isNew } = _lc.addOrUpdateElem(target.id(), param, {
-            position: nodePosition,
-            data: target.data()
-          });
-          triggerCreateOrUpdateEvent(target, label, nodePosition, isNew);
-        } else {
-          _lc.removeElemById(target.id());
-          triggerDeleteEvent(target);
-        }
-      }, 0);
+      if (ev.cy.destroyed()) {
+        return;
+      }
+      let target = ev.target;
+      let param = $$find(_params.slice().reverse(), x => target.is(x.query));
+      if (param) {
+        const nodePosition = getNodePosition(target);
+        const { label, isNew } = _lc.addOrUpdateElem(target.id(), param, {
+          position: nodePosition,
+          data: target.data()
+        });
+        triggerCreateOrUpdateEvent(target, label, nodePosition, isNew);
+      } else {
+        _lc.removeElemById(target.id());
+        triggerDeleteEvent(target);
+      }
     }
 
     function wrapCyHandler({cy}: ICyEventObject) {
