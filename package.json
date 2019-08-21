@@ -10,7 +10,8 @@
   "scripts": {
     "test": "gulp test",
     "build": "tsc --declaration && gulp min",
-    "start": "tsc --watch --declaration"
+    "start": "tsc --watch --declaration",
+    "lint": "tslint -c tslint.json 'src/cytoscape-node-html-label.ts'"
   },
   "repository": {
     "type": "git",

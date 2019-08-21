@@ -144,7 +144,7 @@ interface CytoscapeNodeHtmlParams {
 
     private initStyles(cssClass: string) {
       let stl = this._node.style;
-      stl.position = 'absolute';
+      stl.position = "absolute";
       if (cssClass && cssClass.length) {
         this._node.classList.add(cssClass);
       }
@@ -285,15 +285,15 @@ interface CytoscapeNodeHtmlParams {
       }
 
       let stl = _titlesContainer.style;
-      stl.position = 'absolute';
-      stl['z-index'] = 10;
-      stl.width = '500px';
-      stl['pointer-events'] = 'none';
-      stl.margin = '0px';
-      stl.padding = '0px';
-      stl.border = '0px';
-      stl.outline = '0px';
-      stl.outline = '0px';
+      stl.position = "absolute";
+      stl["z-index"] = 10;
+      stl.width = "500px";
+      stl["pointer-events"] = "none";
+      stl.margin = "0px";
+      stl.padding = "0px";
+      stl.border = "0px";
+      stl.outline = "0px";
+      stl.outline = "0px";
 
 
       _cyCanvas.parentNode.appendChild(_titlesContainer);
@@ -345,7 +345,6 @@ interface CytoscapeNodeHtmlParams {
     }
 
     function moveCyHandler(ev: ICyEventObject) {
-      //console.log('moveCyHandler');
       _lc.updateElemPosition(ev.target.id(), getNodePosition(ev.target));
     }
 
