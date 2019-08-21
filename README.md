@@ -10,7 +10,7 @@ This extension provide ability adding labels for Cytoscape nodes. Simple example
 
 Demo: https://kaluginserg.github.io/cytoscape-node-html-label/
 
-## Fitures
+## Features
 - optimised for high performance with high number nodes, for smooth panning and zooming.
 - customizable any labels with different templates.
 
@@ -106,6 +106,14 @@ cyInstance.nodeHtmlLabel([{
         }
     }
 ]);
+
+// Listening for changes
+cyInstance.on('nodehtml-create-or-update nodehtml-delete', function(event, data) {
+   // When created/updated data has the label, and you can get the html node with element.getNode()
+   // It also has isNew to know if it was created or updated.
+   // Target event is the cytoscape node associated to the label.
+});
+
 ```
 
 Demo here: https://kaluginserg.github.io/cytoscape-node-html-label/
