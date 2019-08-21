@@ -46,6 +46,22 @@ interface CytoscapeNodeHtmlParams {
     h: number;
   }
 
+  interface IAddOrUpdateElementResponse {
+    label: LabelElement;
+    isNew: boolean;
+  }
+
+  enum NodeHtmlEventType {
+    CREATE_OR_UPDATE = "nodehtml-create-or-update",
+    DELETE = "nodehtml-delete"
+  }
+
+  interface INodeHtmlEventCreateOrUpdate {
+    label: LabelElement;
+    position: ICytoscapeNodeHtmlPosition;
+    isNew: boolean;
+  }
+
   interface ILabelElement {
     data?: any;
     position?: ICytoscapeNodeHtmlPosition;
@@ -167,12 +183,20 @@ interface CytoscapeNodeHtmlParams {
       this._elements = <HashTableElements>{};
     }
 
-    addOrUpdateElem(id: string, param: CytoscapeNodeHtmlParams, payload: { data?: any, position?: ICytoscapeNodeHtmlPosition } = {}) {
+    addOrUpdateElem(
+        id: string,
+        param: CytoscapeNodeHtmlParams,
+        payload: { data?: any, position?: ICytoscapeNodeHtmlPosition } = {}
+        ): IAddOrUpdateElementResponse {
       let cur = this._elements[id];
       if (cur) {
         cur.updateParams(param);
         cur.updateData(payload.data);
         cur.updatePosition(payload.position);
+        return {
+          label: cur,
+          isNew: false
+        };
       } else {
         let nodeElem = document.createElement("div");
         this._node.appendChild(nodeElem);
@@ -182,6 +206,10 @@ interface CytoscapeNodeHtmlParams {
           data: payload.data,
           position: payload.position
         }, param);
+        return {
+          label: this._elements[id],
+          isNew: true
+        };
       }
     }
 
@@ -189,7 +217,9 @@ interface CytoscapeNodeHtmlParams {
       if (this._elements[id]) {
         this._node.removeChild(this._elements[id].getNode());
         delete this._elements[id];
+        return true;
       }
+      return false;
     }
 
     updateElemPosition(id: string, position?: ICytoscapeNodeHtmlPosition) {
@@ -231,6 +261,19 @@ interface CytoscapeNodeHtmlParams {
 
     return _cy;
 
+    function triggerCreateOrUpdateEvent(cytoscapeNode: any, label: LabelElement, position: ICytoscapeNodeHtmlPosition, isNew: boolean) {
+      const eventData: INodeHtmlEventCreateOrUpdate = {
+        label,
+        position,
+        isNew
+      };
+      cytoscapeNode.trigger(NodeHtmlEventType.CREATE_OR_UPDATE, eventData);
+    }
+
+    function triggerDeleteEvent(cytoscapeNode: any) {
+      cytoscapeNode.trigger(NodeHtmlEventType.DELETE);
+    }
+
     function createLabelContainer(): LabelContainer {
       let _cyContainer = _cy.container();
       let _titlesContainer = document.createElement("div");
@@ -262,10 +305,12 @@ interface CytoscapeNodeHtmlParams {
       _params.forEach(x => {
         cy.elements(x.query).forEach((d: any) => {
           if (d.isNode()) {
-            _lc.addOrUpdateElem(d.id(), x, {
-              position: getNodePosition(d),
+            const nodePosition = getNodePosition(d);
+            const { label, isNew } = _lc.addOrUpdateElem(d.id(), x, {
+              position: nodePosition,
               data: d.data()
             });
+            triggerCreateOrUpdateEvent(d, label, nodePosition, isNew);
           }
         });
       });
@@ -275,10 +320,12 @@ interface CytoscapeNodeHtmlParams {
       let target = ev.target;
       let param = $$find(_params.slice().reverse(), x => target.is(x.query));
       if (param) {
-        _lc.addOrUpdateElem(target.id(), param, {
-          position: getNodePosition(target),
+        const nodePosition = getNodePosition(target);
+        const { label, isNew } = _lc.addOrUpdateElem(target.id(), param, {
+          position: nodePosition,
           data: target.data()
         });
+        triggerCreateOrUpdateEvent(target, label, nodePosition, isNew);
       }
     }
 
@@ -294,6 +341,7 @@ interface CytoscapeNodeHtmlParams {
 
     function removeCyHandler(ev: ICyEventObject) {
       _lc.removeElemById(ev.target.id());
+      triggerDeleteEvent(ev.target);
     }
 
     function moveCyHandler(ev: ICyEventObject) {
@@ -306,12 +354,15 @@ interface CytoscapeNodeHtmlParams {
         let target = ev.target;
         let param = $$find(_params.slice().reverse(), x => target.is(x.query));
         if (param) {
-          _lc.addOrUpdateElem(target.id(), param, {
-            position: getNodePosition(target),
+          const nodePosition = getNodePosition(target);
+          const { label, isNew } = _lc.addOrUpdateElem(target.id(), param, {
+            position: nodePosition,
             data: target.data()
           });
+          triggerCreateOrUpdateEvent(target, label, nodePosition, isNew);
         } else {
           _lc.removeElemById(target.id());
+          triggerDeleteEvent(target);
         }
       }, 0);
     }
