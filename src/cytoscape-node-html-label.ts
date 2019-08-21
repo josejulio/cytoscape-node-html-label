@@ -350,6 +350,9 @@ interface CytoscapeNodeHtmlParams {
 
     function updateDataOrStyleCyHandler(ev: ICyEventObject) {
       setTimeout(() => {
+        if (ev.cy.destroyed()) {
+          return;
+        }
         let target = ev.target;
         let param = $$find(_params.slice().reverse(), x => target.is(x.query));
         if (param) {
