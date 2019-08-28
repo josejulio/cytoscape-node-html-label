@@ -1,3 +1,5 @@
+import * as CyTypes from "cytoscape";
+
 type IHAlign = "left" | "center" | "right";
 type IVAlign = "top" | "center" | "bottom";
 declare var module: any;
@@ -243,39 +245,114 @@ interface CytoscapeNodeHtmlParams {
     }
   }
 
-  function cyNodeHtmlLabel(_cy: any, params: CytoscapeNodeHtmlParams[]) {
-    const _params = (!params || typeof params !== "object") ? [] : params;
-    const _lc = createLabelContainer();
+  class CytoscapeNodeHtmlLabel {
+    private labelContainer: LabelContainer;
+    private params: CytoscapeNodeHtmlParams[];
 
-    _cy.one("render", (e: any) => {
-      createNodesCyHandler(e);
-      wrapCyHandler(e);
-    });
-    _cy.on("add", addCyHandler);
-    _cy.on("layoutstop", layoutstopHandler);
-    _cy.on("remove", removeCyHandler);
-    _cy.on("data", updateDataOrStyleCyHandler);
-    _cy.on("style", updateDataOrStyleCyHandler);
-    _cy.on("pan zoom", wrapCyHandler);
-    _cy.on("position bounds", moveCyHandler); // "bounds" - not documented event
-
-    return _cy;
-
-    function triggerCreateOrUpdateEvent(cytoscapeNode: any, label: LabelElement, position: ICytoscapeNodeHtmlPosition, isNew: boolean) {
-      const eventData: INodeHtmlEventCreateOrUpdate = {
-        label,
-        position,
-        isNew
-      };
-      cytoscapeNode.trigger(NodeHtmlEventType.CREATE_OR_UPDATE, eventData);
+    constructor(cy: CyTypes.Core, params: CytoscapeNodeHtmlParams[]) {
+      this.params = params;
+      this.labelContainer = this.createLabelContainer(cy);
+      this.attachEvents(cy);
     }
 
-    function triggerDeleteEvent(cytoscapeNode: any) {
-      cytoscapeNode.trigger(NodeHtmlEventType.DELETE);
+    public updateTarget(target: CyTypes.NodeCollection) {
+      target.each((ele: CyTypes.NodeSingular) => {
+        this.updateNode(ele);
+      });
     }
 
-    function createLabelContainer(): LabelContainer {
-      let _cyContainer = _cy.container();
+    private attachEvents(cy: CyTypes.Core) {
+      cy.one("render", (e: any) => {
+        this.createNodesCyHandler(e);
+        this.wrapCyHandler(e);
+      });
+      cy.on("add", this.addCyHandler);
+      cy.on("layoutstop", this.layoutstopHandler);
+      cy.on("remove", this.removeCyHandler);
+      cy.on("data", this.updateDataOrStyleCyHandler);
+      cy.on("style", this.updateDataOrStyleCyHandler);
+      cy.on("pan zoom", this.wrapCyHandler);
+      cy.on("position bounds", this.moveCyHandler); // "bounds" - not documented event
+    }
+
+    private updateNode(node: CyTypes.NodeSingular) {
+      let param = $$find(this.params.slice().reverse(), x => node.is(x.query));
+      if (param) {
+        const nodePosition = this.getNodePosition(node);
+        const { label, isNew } = this.labelContainer.addOrUpdateElem(node.id(), param, {
+          position: nodePosition,
+          data: node.data()
+        });
+        this.triggerCreateOrUpdateEvent(node, label, nodePosition, isNew);
+      } else {
+        this.labelContainer.removeElemById(node.id());
+        this.triggerDeleteEvent(node);
+      }
+    }
+
+    private addCyHandler = (ev: CyTypes.EventObject) => {
+      let target = ev.target;
+      let param = $$find(this.params.slice().reverse(), x => target.is(x.query));
+      if (param) {
+        const nodePosition = this.getNodePosition(target);
+        const { label, isNew } = this.labelContainer.addOrUpdateElem(target.id(), param, {
+          position: nodePosition,
+          data: target.data()
+        });
+        this.triggerCreateOrUpdateEvent(target, label, nodePosition, isNew);
+      }
+    }
+
+    private layoutstopHandler = ({cy}: CyTypes.EventObject) => {
+      this.params.forEach(x => {
+        cy.elements(x.query).forEach((d: any) => {
+          if (d.isNode()) {
+            this.labelContainer.updateElemPosition(d.id(), this.getNodePosition(d));
+          }
+        });
+      });
+    }
+
+    private removeCyHandler = (ev: CyTypes.EventObject) => {
+      this.labelContainer.removeElemById(ev.target.id());
+      this.triggerDeleteEvent(ev.target);
+    }
+
+    private moveCyHandler = (ev: CyTypes.EventObject) => {
+      this.labelContainer.updateElemPosition(ev.target.id(), this.getNodePosition(ev.target));
+    }
+
+    private updateDataOrStyleCyHandler = (ev: CyTypes.EventObject) => {
+      if (ev.cy.destroyed()) {
+        return;
+      }
+      this.updateNode(ev.target);
+    }
+
+    private createNodesCyHandler = ({cy}: ICyEventObject) => {
+      this.params.forEach(x => {
+        cy.elements(x.query).forEach((d: any) => {
+          if (d.isNode()) {
+            const nodePosition = this.getNodePosition(d);
+            const { label, isNew } = this.labelContainer.addOrUpdateElem(d.id(), x, {
+              position: nodePosition,
+              data: d.data()
+            });
+            this.triggerCreateOrUpdateEvent(d, label, nodePosition, isNew);
+          }
+        });
+      });
+    }
+
+    private wrapCyHandler = ({cy}: CyTypes.EventObject) => {
+      this.labelContainer.updatePanZoom({
+        pan: cy.pan(),
+        zoom: cy.zoom()
+      });
+    }
+
+    private createLabelContainer(cy: CyTypes.Core): LabelContainer {
+      let _cyContainer = cy.container();
       let _titlesContainer = document.createElement("div");
 
       let _cyCanvas = _cyContainer.querySelector("canvas");
@@ -288,7 +365,8 @@ interface CytoscapeNodeHtmlParams {
       stl.position = "absolute";
       stl["z-index"] = 10;
       stl.width = "500px";
-      stl["pointer-events"] = "none";
+      stl["pointer-events"] = "all";
+      stl.cursor = "default";
       stl.margin = "0px";
       stl.padding = "0px";
       stl.border = "0px";
@@ -301,80 +379,20 @@ interface CytoscapeNodeHtmlParams {
       return new LabelContainer(_titlesContainer);
     }
 
-    function createNodesCyHandler({cy}: ICyEventObject) {
-      _params.forEach(x => {
-        cy.elements(x.query).forEach((d: any) => {
-          if (d.isNode()) {
-            const nodePosition = getNodePosition(d);
-            const { label, isNew } = _lc.addOrUpdateElem(d.id(), x, {
-              position: nodePosition,
-              data: d.data()
-            });
-            triggerCreateOrUpdateEvent(d, label, nodePosition, isNew);
-          }
-        });
-      });
+    private triggerCreateOrUpdateEvent(cytoscapeNode: any, label: LabelElement, position: ICytoscapeNodeHtmlPosition, isNew: boolean) {
+      const eventData: INodeHtmlEventCreateOrUpdate = {
+        label,
+        position,
+        isNew
+      };
+      cytoscapeNode.trigger(NodeHtmlEventType.CREATE_OR_UPDATE, eventData);
     }
 
-    function addCyHandler(ev: ICyEventObject) {
-      let target = ev.target;
-      let param = $$find(_params.slice().reverse(), x => target.is(x.query));
-      if (param) {
-        const nodePosition = getNodePosition(target);
-        const { label, isNew } = _lc.addOrUpdateElem(target.id(), param, {
-          position: nodePosition,
-          data: target.data()
-        });
-        triggerCreateOrUpdateEvent(target, label, nodePosition, isNew);
-      }
+    private triggerDeleteEvent(cytoscapeNode: any) {
+      cytoscapeNode.trigger(NodeHtmlEventType.DELETE);
     }
 
-    function layoutstopHandler({cy}: ICyEventObject) {
-      _params.forEach(x => {
-        cy.elements(x.query).forEach((d: any) => {
-          if (d.isNode()) {
-            _lc.updateElemPosition(d.id(), getNodePosition(d));
-          }
-        });
-      });
-    }
-
-    function removeCyHandler(ev: ICyEventObject) {
-      _lc.removeElemById(ev.target.id());
-      triggerDeleteEvent(ev.target);
-    }
-
-    function moveCyHandler(ev: ICyEventObject) {
-      _lc.updateElemPosition(ev.target.id(), getNodePosition(ev.target));
-    }
-
-    function updateDataOrStyleCyHandler(ev: ICyEventObject) {
-      if (ev.cy.destroyed()) {
-        return;
-      }
-      let target = ev.target;
-      let param = $$find(_params.slice().reverse(), x => target.is(x.query));
-      if (param) {
-        const nodePosition = getNodePosition(target);
-        const { label, isNew } = _lc.addOrUpdateElem(target.id(), param, {
-          position: nodePosition,
-          data: target.data()
-        });
-        triggerCreateOrUpdateEvent(target, label, nodePosition, isNew);
-      } else {
-        _lc.removeElemById(target.id());
-        triggerDeleteEvent(target);
-      }
-    }
-
-    function wrapCyHandler({cy}: ICyEventObject) {
-      _lc.updatePanZoom({
-        pan: cy.pan(),
-        zoom: cy.zoom()
-      });
-    }
-
-    function getNodePosition(node: any): ICytoscapeNodeHtmlPosition {
+    private getNodePosition(node: any): ICytoscapeNodeHtmlPosition {
       return {
         w: node.width(),
         h: node.height(),
@@ -382,6 +400,23 @@ interface CytoscapeNodeHtmlParams {
         y: node.position("y")
       };
     }
+
+  }
+
+  function cyNodeHtmlLabel(_cy: any, params: CytoscapeNodeHtmlParams[]): CytoscapeNodeHtmlLabel {
+
+    const SCRATCHPAD_NAMESPACE_INSTANCE = "cytoscape-node-html-label.instance";
+
+    let instance: CytoscapeNodeHtmlLabel = _cy.scratch(SCRATCHPAD_NAMESPACE_INSTANCE);
+    if (instance) {
+      return instance;
+    }
+
+    const _params = (!params || typeof params !== "object") ? [] : params;
+    instance = new CytoscapeNodeHtmlLabel(_cy, _params);
+    _cy.scratch(SCRATCHPAD_NAMESPACE_INSTANCE, instance);
+
+    return instance;
   }
 
   // registers the extension on a cytoscape lib ref
