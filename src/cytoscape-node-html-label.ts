@@ -255,7 +255,7 @@ interface CytoscapeNodeHtmlParams {
       this.attachEvents(cy);
     }
 
-    public updateTarget(target: CyTypes.NodeCollection) {
+    public updateNodeLabel(target: CyTypes.NodeCollection) {
       target.each((ele: CyTypes.NodeSingular) => {
         this.updateNode(ele);
       });

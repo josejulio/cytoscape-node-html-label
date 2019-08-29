@@ -107,12 +107,19 @@ cyInstance.nodeHtmlLabel([{
     }
 ]);
 
+// cyInstance.nodeHtmlLabel returns a `CytoscapeNodeHtmlLabel` instance, you will get the
+// same instance if calling on it more times.
+
+
 // Listening for changes
 cyInstance.on('nodehtml-create-or-update nodehtml-delete', function(event, data) {
    // When created/updated data has the label, and you can get the html node with element.getNode()
    // It also has isNew to know if it was created or updated.
    // Target event is the cytoscape node associated to the label.
 });
+
+// Requesting an update of a node label
+cyInstance.nodeHtmlLabel().updateNodeLabel(cy.$id('a5'))
 
 ```
 
