@@ -1,6 +1,9 @@
 cytoscape-node-html-label
 ================================================================================
 
+This project was forked off https://github.com/kaluginserg/cytoscape-node-html-label
+I forked it off because the projected seemed abandoned, if the author comes back 
+I'll try to push my changes there.
 
 ## Description
 
