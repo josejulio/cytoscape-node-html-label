@@ -15,6 +15,11 @@
         }
         return undefined;
     };
+    var NodeHtmlEventType;
+    (function (NodeHtmlEventType) {
+        NodeHtmlEventType["CREATE_OR_UPDATE"] = "nodehtml-create-or-update";
+        NodeHtmlEventType["DELETE"] = "nodehtml-delete";
+    })(NodeHtmlEventType || (NodeHtmlEventType = {}));
     var LabelElement = (function () {
         function LabelElement(_a, params) {
             var node = _a.node, _b = _a.position, position = _b === void 0 ? null : _b, _c = _a.data, data = _c === void 0 ? null : _c;
@@ -61,7 +66,7 @@
         };
         LabelElement.prototype.initStyles = function (cssClass) {
             var stl = this._node.style;
-            stl.position = 'absolute';
+            stl.position = "absolute";
             if (cssClass && cssClass.length) {
                 this._node.classList.add(cssClass);
             }
@@ -95,6 +100,10 @@
                 cur.updateParams(param);
                 cur.updateData(payload.data);
                 cur.updatePosition(payload.position);
+                return {
+                    label: cur,
+                    isNew: false
+                };
             }
             else {
                 var nodeElem = document.createElement("div");
@@ -104,13 +113,19 @@
                     data: payload.data,
                     position: payload.position
                 }, param);
+                return {
+                    label: this._elements[id],
+                    isNew: true
+                };
             }
         };
         LabelContainer.prototype.removeElemById = function (id) {
             if (this._elements[id]) {
                 this._node.removeChild(this._elements[id].getNode());
                 delete this._elements[id];
+                return true;
             }
+            return false;
         };
         LabelContainer.prototype.updateElemPosition = function (id, position) {
             var ele = this._elements[id];
@@ -132,22 +147,107 @@
         };
         return LabelContainer;
     }());
-    function cyNodeHtmlLabel(_cy, params) {
-        var _params = (!params || typeof params !== "object") ? [] : params;
-        var _lc = createLabelContainer();
-        _cy.one("render", function (e) {
-            createNodesCyHandler(e);
-            wrapCyHandler(e);
-        });
-        _cy.on("add", addCyHandler);
-        _cy.on("layoutstop", layoutstopHandler);
-        _cy.on("remove", removeCyHandler);
-        _cy.on("data", updateDataCyHandler);
-        _cy.on("pan zoom", wrapCyHandler);
-        _cy.on("drag bounds", moveCyHandler);
-        return _cy;
-        function createLabelContainer() {
-            var _cyContainer = _cy.container();
+    var CytoscapeNodeHtmlLabel = (function () {
+        function CytoscapeNodeHtmlLabel(cy, params) {
+            var _this = this;
+            this.addCyHandler = function (ev) {
+                var target = ev.target;
+                var param = $$find(_this.params.slice().reverse(), function (x) { return target.is(x.query); });
+                if (param) {
+                    var nodePosition = _this.getNodePosition(target);
+                    var _a = _this.labelContainer.addOrUpdateElem(target.id(), param, {
+                        position: nodePosition,
+                        data: target.data()
+                    }), label = _a.label, isNew = _a.isNew;
+                    _this.triggerCreateOrUpdateEvent(target, label, nodePosition, isNew);
+                }
+            };
+            this.layoutstopHandler = function (_a) {
+                var cy = _a.cy;
+                _this.params.forEach(function (x) {
+                    cy.elements(x.query).forEach(function (d) {
+                        if (d.isNode()) {
+                            _this.labelContainer.updateElemPosition(d.id(), _this.getNodePosition(d));
+                        }
+                    });
+                });
+            };
+            this.removeCyHandler = function (ev) {
+                _this.labelContainer.removeElemById(ev.target.id());
+                _this.triggerDeleteEvent(ev.target);
+            };
+            this.moveCyHandler = function (ev) {
+                _this.labelContainer.updateElemPosition(ev.target.id(), _this.getNodePosition(ev.target));
+            };
+            this.updateDataOrStyleCyHandler = function (ev) {
+                if (ev.cy.destroyed()) {
+                    return;
+                }
+                _this.updateNode(ev.target);
+            };
+            this.createNodesCyHandler = function (_a) {
+                var cy = _a.cy;
+                _this.params.forEach(function (x) {
+                    cy.elements(x.query).forEach(function (d) {
+                        if (d.isNode()) {
+                            var nodePosition = _this.getNodePosition(d);
+                            var _a = _this.labelContainer.addOrUpdateElem(d.id(), x, {
+                                position: nodePosition,
+                                data: d.data()
+                            }), label = _a.label, isNew = _a.isNew;
+                            _this.triggerCreateOrUpdateEvent(d, label, nodePosition, isNew);
+                        }
+                    });
+                });
+            };
+            this.wrapCyHandler = function (_a) {
+                var cy = _a.cy;
+                _this.labelContainer.updatePanZoom({
+                    pan: cy.pan(),
+                    zoom: cy.zoom()
+                });
+            };
+            this.params = params;
+            this.labelContainer = this.createLabelContainer(cy);
+            this.attachEvents(cy);
+        }
+        CytoscapeNodeHtmlLabel.prototype.updateNodeLabel = function (target) {
+            var _this = this;
+            target.each(function (ele) {
+                _this.updateNode(ele);
+            });
+        };
+        CytoscapeNodeHtmlLabel.prototype.attachEvents = function (cy) {
+            var _this = this;
+            cy.one("render", function (e) {
+                _this.createNodesCyHandler(e);
+                _this.wrapCyHandler(e);
+            });
+            cy.on("add", this.addCyHandler);
+            cy.on("layoutstop", this.layoutstopHandler);
+            cy.on("remove", this.removeCyHandler);
+            cy.on("data", this.updateDataOrStyleCyHandler);
+            cy.on("style", this.updateDataOrStyleCyHandler);
+            cy.on("pan zoom", this.wrapCyHandler);
+            cy.on("position bounds", this.moveCyHandler);
+        };
+        CytoscapeNodeHtmlLabel.prototype.updateNode = function (node) {
+            var param = $$find(this.params.slice().reverse(), function (x) { return node.is(x.query); });
+            if (param) {
+                var nodePosition = this.getNodePosition(node);
+                var _a = this.labelContainer.addOrUpdateElem(node.id(), param, {
+                    position: nodePosition,
+                    data: node.data()
+                }), label = _a.label, isNew = _a.isNew;
+                this.triggerCreateOrUpdateEvent(node, label, nodePosition, isNew);
+            }
+            else {
+                this.labelContainer.removeElemById(node.id());
+                this.triggerDeleteEvent(node);
+            }
+        };
+        CytoscapeNodeHtmlLabel.prototype.createLabelContainer = function (cy) {
+            var _cyContainer = cy.container();
             var _titlesContainer = document.createElement("div");
             var _cyCanvas = _cyContainer.querySelector("canvas");
             var cur = _cyContainer.querySelector("[class^='cy-node-html']");
@@ -155,87 +255,50 @@
                 _cyCanvas.parentNode.removeChild(cur);
             }
             var stl = _titlesContainer.style;
-            stl.position = 'absolute';
-            stl['z-index'] = 10;
-            stl.width = '500px';
-            stl['pointer-events'] = 'none';
-            stl.margin = '0px';
-            stl.padding = '0px';
-            stl.border = '0px';
-            stl.outline = '0px';
-            stl.outline = '0px';
+            stl.position = "absolute";
+            stl["z-index"] = 10;
+            stl.width = "500px";
+            stl["pointer-events"] = "all";
+            stl.cursor = "default";
+            stl.margin = "0px";
+            stl.padding = "0px";
+            stl.border = "0px";
+            stl.outline = "0px";
+            stl.outline = "0px";
             _cyCanvas.parentNode.appendChild(_titlesContainer);
             return new LabelContainer(_titlesContainer);
-        }
-        function createNodesCyHandler(_a) {
-            var cy = _a.cy;
-            _params.forEach(function (x) {
-                cy.elements(x.query).forEach(function (d) {
-                    if (d.isNode()) {
-                        _lc.addOrUpdateElem(d.id(), x, {
-                            position: getNodePosition(d),
-                            data: d.data()
-                        });
-                    }
-                });
-            });
-        }
-        function addCyHandler(ev) {
-            var target = ev.target;
-            var param = $$find(_params.slice().reverse(), function (x) { return target.is(x.query); });
-            if (param) {
-                _lc.addOrUpdateElem(target.id(), param, {
-                    position: getNodePosition(target),
-                    data: target.data()
-                });
-            }
-        }
-        function layoutstopHandler(_a) {
-            var cy = _a.cy;
-            _params.forEach(function (x) {
-                cy.elements(x.query).forEach(function (d) {
-                    if (d.isNode()) {
-                        _lc.updateElemPosition(d.id(), getNodePosition(d));
-                    }
-                });
-            });
-        }
-        function removeCyHandler(ev) {
-            _lc.removeElemById(ev.target.id());
-        }
-        function moveCyHandler(ev) {
-            _lc.updateElemPosition(ev.target.id(), getNodePosition(ev.target));
-        }
-        function updateDataCyHandler(ev) {
-            setTimeout(function () {
-                var target = ev.target;
-                var param = $$find(_params.slice().reverse(), function (x) { return target.is(x.query); });
-                if (param) {
-                    _lc.addOrUpdateElem(target.id(), param, {
-                        position: getNodePosition(target),
-                        data: target.data()
-                    });
-                }
-                else {
-                    _lc.removeElemById(target.id());
-                }
-            }, 0);
-        }
-        function wrapCyHandler(_a) {
-            var cy = _a.cy;
-            _lc.updatePanZoom({
-                pan: cy.pan(),
-                zoom: cy.zoom()
-            });
-        }
-        function getNodePosition(node) {
+        };
+        CytoscapeNodeHtmlLabel.prototype.triggerCreateOrUpdateEvent = function (cytoscapeNode, label, position, isNew) {
+            var eventData = {
+                label: label,
+                position: position,
+                isNew: isNew
+            };
+            cytoscapeNode.trigger(NodeHtmlEventType.CREATE_OR_UPDATE, eventData);
+        };
+        CytoscapeNodeHtmlLabel.prototype.triggerDeleteEvent = function (cytoscapeNode) {
+            cytoscapeNode.trigger(NodeHtmlEventType.DELETE);
+        };
+        CytoscapeNodeHtmlLabel.prototype.getNodePosition = function (node) {
             return {
                 w: node.width(),
                 h: node.height(),
                 x: node.position("x"),
                 y: node.position("y")
             };
+        };
+        return CytoscapeNodeHtmlLabel;
+    }());
+    function cyNodeHtmlLabel(_cy, params) {
+        var SCRATCHPAD_NAMESPACE_INSTANCE = "cytoscape-node-html-label.instance";
+        var instance = _cy.scratch(SCRATCHPAD_NAMESPACE_INSTANCE);
+        if (instance) {
+            return instance;
         }
+        var _params = (!params || typeof params !== "object") ? [] : params;
+        instance = new CytoscapeNodeHtmlLabel(_cy, _params);
+        _cy.scratch(SCRATCHPAD_NAMESPACE_INSTANCE, instance);
+        return instance;
     }
     var register = function (cy) {
         if (!cy) {
